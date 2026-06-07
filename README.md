@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Finanças Pessoais
 
-## Getting Started
+App web mobile-first de organização financeira pessoal. Instalável como PWA no Android.
 
-First, run the development server:
+## Stack
+- **Next.js 16** (App Router) + TypeScript + Tailwind CSS v4
+- **Supabase** — Postgres (dados), Auth (login), Storage (arquivos)
+- **Recharts** (gráficos) + **PapaParse** (CSV)
+- **Deploy**: Vercel (CI/CD automático a cada push na `main`)
+
+---
+
+## 1. Configurar o banco de dados (Supabase)
+
+1. Abra o [Supabase Dashboard](https://supabase.com/dashboard/project/lxgbdurbfxuuvcmlwhnb)
+2. Vá em **SQL Editor**
+3. Cole e execute o conteúdo de `supabase/migrations/001_initial.sql`
+
+---
+
+## 2. Criar sua conta de usuário
+
+1. No Dashboard → **Authentication** → **Users** → **Add user** → **Create new user**
+2. Insira seu e-mail e senha
+3. Copie o **UUID** do usuário criado (coluna `id`)
+
+---
+
+## 3. Executar o seed (orçamento padrão)
+
+1. Abra `supabase/seed.sql`
+2. Substitua `YOUR_USER_UUID` pelo UUID copiado
+3. Execute no SQL Editor
+
+---
+
+## 4. Desabilitar cadastros públicos (CRÍTICO — app privado)
+
+1. Dashboard → **Authentication** → **Sign In / Sign Up**  
+2. Desative **"Enable sign ups"**
+
+Agora ninguém mais pode criar conta. Só você (já cadastrado) consegue logar.
+
+---
+
+## 5. Deploy na Vercel
+
+1. Acesse [vercel.com](https://vercel.com) → **Add New Project** → importe este repositório
+2. Adicione as variáveis de ambiente:
+   - `NEXT_PUBLIC_SUPABASE_URL` = `https://lxgbdurbfxuuvcmlwhnb.supabase.co`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = sua anon key
+3. Deploy automático acontece a cada push na branch `main`
+
+---
+
+## 6. Instalar no Android (PWA)
+
+1. Abra o app no **Chrome para Android**
+2. Menu (⋮) → **"Adicionar à tela inicial"**
+3. O app abre em tela cheia sem barra do navegador
+
+> **Ícones:** Adicione `icon-192.png` e `icon-512.png` em `public/icons/`. Gere em [favicon.io](https://favicon.io).
+
+---
+
+## 7. Rodar localmente
 
 ```bash
+npm install
+# Crie .env.local com as chaves do Supabase
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Formatos de CSV suportados
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Tipo | Cabeçalho detectado |
+|---|---|
+| Fatura Nubank | `date,title,amount` |
+| Extrato bancário | `Data,Valor,Identificador,Descrição` |
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**Regras automáticas:**
+- "Pagamento de fatura" e "Pagamento recebido" → ignorados (evita dupla contagem)
+- Duplicatas → detectadas por hash, ignoradas silenciosamente
+- Estornos → salvos com valor negativo (abate do total da categoria)
