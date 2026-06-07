@@ -12,9 +12,26 @@ import HistoryChart from '@/components/dashboard/HistoryChart'
 import Card from '@/components/ui/Card'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
+function getWeekBounds(anchor: Date) {
+  const day = anchor.getDay()
+  const start = new Date(anchor)
+  start.setDate(anchor.getDate() - day)
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6)
+  return { start: toISODate(start), end: toISODate(end) }
+}
+
+function weekLabel(anchor: Date) {
+  const { start, end } = getWeekBounds(anchor)
+  const fmt = (s: string) => s.split('-').reverse().join('/')
+  return `${fmt(start)} – ${fmt(end)}`
+}
+
 export default function DashboardPage() {
   const supabase = createClient()
   const [weeklyMode, setWeeklyMode] = useState(false)
+  const [weekAnchor, setWeekAnchor] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [budgets, setBudgets] = useState<Budget[]>([])
@@ -25,10 +42,14 @@ export default function DashboardPage() {
   const year = selectedDate.getFullYear()
   const month = selectedDate.getMonth() + 1
 
+  // When weekly mode: fetch the whole month the weekAnchor belongs to
+  const fetchYear = weeklyMode ? weekAnchor.getFullYear() : year
+  const fetchMonth = weeklyMode ? weekAnchor.getMonth() + 1 : month
+
   const fetchData = useCallback(async () => {
     setLoading(true)
-    const start = toISODate(new Date(year, month - 1, 1))
-    const end = toISODate(new Date(year, month, 0))
+    const start = toISODate(new Date(fetchYear, fetchMonth - 1, 1))
+    const end = toISODate(new Date(fetchYear, fetchMonth, 0))
 
     const [txRes, budgetRes, settingsRes, histRes] = await Promise.all([
       supabase.from('transactions').select('*').gte('date', start).lte('date', end).gt('amount', 0).order('date', { ascending: false }),
@@ -55,22 +76,20 @@ export default function DashboardPage() {
     }
 
     setLoading(false)
-  }, [year, month])
+  }, [fetchYear, fetchMonth])
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  const getWeekRange = () => {
-    const now = new Date()
-    const day = now.getDay()
-    const start = new Date(now)
-    start.setDate(now.getDate() - day)
-    const end = new Date(start)
-    end.setDate(start.getDate() + 6)
-    return { start: toISODate(start), end: toISODate(end) }
+  function prevWeek() {
+    setWeekAnchor(d => { const n = new Date(d); n.setDate(d.getDate() - 7); return n })
+  }
+  function nextWeek() {
+    setWeekAnchor(d => { const n = new Date(d); n.setDate(d.getDate() + 7); return n })
   }
 
+  const { start: wStart, end: wEnd } = getWeekBounds(weekAnchor)
   const displayedTx = weeklyMode
-    ? (() => { const { start, end } = getWeekRange(); return transactions.filter(t => t.date >= start && t.date <= end) })()
+    ? transactions.filter(t => t.date >= wStart && t.date <= wEnd)
     : transactions
 
   const categorySpending: Record<string, number> = {}
@@ -78,6 +97,10 @@ export default function DashboardPage() {
 
   const totalSpent = Object.values(categorySpending).reduce((a, b) => a + b, 0)
   const totalLimit = budgets.reduce((a, b) => a + b.monthly_limit, 0)
+
+  const weeklyIncome = Math.round(settings.monthly_income / 4.33)
+  const weeklySavingsGoal = Math.round(settings.savings_goal / 4.33)
+  const weeklyTotalLimit = Math.round(totalLimit / 4.33)
 
   const categoryData = budgets.map(b => ({
     category: b.category,
@@ -87,22 +110,30 @@ export default function DashboardPage() {
 
   return (
     <div className="px-4 pt-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <button onClick={() => setSelectedDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="p-2" style={{color:'#94a3b8'}}>
-          <ChevronLeft size={20} />
-        </button>
-        <h1 className="text-lg font-semibold capitalize text-white">{getMonthLabel(year, month)}</h1>
-        <button onClick={() => setSelectedDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))} className="p-2" style={{color:'#94a3b8'}}>
-          <ChevronRight size={20} />
-        </button>
-      </div>
-
+      {/* Mode toggle */}
       <div className="flex rounded-xl p-1 gap-1" style={{background:'#1e293b'}}>
         <button onClick={() => setWeeklyMode(false)} className="flex-1 py-2 rounded-lg text-sm font-medium transition" style={{background: !weeklyMode ? '#4f46e5' : 'transparent', color: !weeklyMode ? 'white' : '#64748b'}}>
           Mensal
         </button>
-        <button onClick={() => setWeeklyMode(true)} className="flex-1 py-2 rounded-lg text-sm font-medium transition" style={{background: weeklyMode ? '#4f46e5' : 'transparent', color: weeklyMode ? 'white' : '#64748b'}}>
+        <button onClick={() => { setWeeklyMode(true); setWeekAnchor(new Date()) }} className="flex-1 py-2 rounded-lg text-sm font-medium transition" style={{background: weeklyMode ? '#4f46e5' : 'transparent', color: weeklyMode ? 'white' : '#64748b'}}>
           Semanal
+        </button>
+      </div>
+
+      {/* Period navigator */}
+      <div className="flex items-center justify-between">
+        <button onClick={weeklyMode ? prevWeek : () => setSelectedDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="p-2" style={{color:'#94a3b8'}}>
+          <ChevronLeft size={20} />
+        </button>
+        <div className="text-center">
+          {weeklyMode ? (
+            <p className="text-sm font-semibold text-white">{weekLabel(weekAnchor)}</p>
+          ) : (
+            <h1 className="text-lg font-semibold capitalize text-white">{getMonthLabel(year, month)}</h1>
+          )}
+        </div>
+        <button onClick={weeklyMode ? nextWeek : () => setSelectedDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))} className="p-2" style={{color:'#94a3b8'}}>
+          <ChevronRight size={20} />
         </button>
       </div>
 
@@ -110,12 +141,19 @@ export default function DashboardPage() {
         <div className="text-center py-12" style={{color:'#64748b'}}>Carregando...</div>
       ) : (
         <>
-          <SavingsCard totalSpent={totalSpent} monthlyIncome={settings.monthly_income} savingsGoal={settings.savings_goal} />
-          <SpendingCard totalSpent={totalSpent} monthlyLimit={weeklyMode ? Math.round(totalLimit / 4.33) : totalLimit} />
+          <SavingsCard
+            totalSpent={totalSpent}
+            monthlyIncome={weeklyMode ? weeklyIncome : settings.monthly_income}
+            savingsGoal={weeklyMode ? weeklySavingsGoal : settings.savings_goal}
+          />
+          <SpendingCard
+            totalSpent={totalSpent}
+            monthlyLimit={weeklyMode ? weeklyTotalLimit : totalLimit}
+          />
 
           <Card>
             <h2 className="text-sm font-semibold mb-3" style={{color:'#cbd5e1'}}>
-              Gastos por categoria {weeklyMode ? '(semana atual)' : '(mês)'}
+              Gastos por categoria {weeklyMode ? '(semana)' : '(mês)'}
             </h2>
             <CategoryBars data={categoryData} weeklyMode={weeklyMode} />
           </Card>
@@ -125,10 +163,12 @@ export default function DashboardPage() {
             <DonutChart data={categoryData} />
           </Card>
 
-          <Card>
-            <h2 className="text-sm font-semibold mb-2" style={{color:'#cbd5e1'}}>Histórico mensal</h2>
-            <HistoryChart data={history} />
-          </Card>
+          {!weeklyMode && (
+            <Card>
+              <h2 className="text-sm font-semibold mb-2" style={{color:'#cbd5e1'}}>Histórico mensal</h2>
+              <HistoryChart data={history} />
+            </Card>
+          )}
         </>
       )}
     </div>

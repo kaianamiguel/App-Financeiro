@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { isContaCSV, parseContaCSV } from '@/lib/parsers/conta'
 import { isCartaoCSV, parseCartaoCSV } from '@/lib/parsers/cartao'
@@ -17,17 +17,28 @@ export default function ImportarPage() {
   const [dragging, setDragging] = useState(false)
   const [parsing, setParsing] = useState(false)
   const [preview, setPreview] = useState<ParsedTransaction[]>([])
+  const [observations, setObservations] = useState<Record<number, string>>({})
   const [filename, setFilename] = useState('')
   const [fileType, setFileType] = useState<'cartao' | 'conta' | null>(null)
   const [result, setResult] = useState<ImportResult | null>(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [allCategories, setAllCategories] = useState<string[]>([...CATEGORIES])
+
+  useEffect(() => {
+    supabase.from('budgets').select('category').then(({ data }) => {
+      if (!data) return
+      const custom = data.map(b => b.category).filter(c => !(CATEGORIES as readonly string[]).includes(c))
+      if (custom.length > 0) setAllCategories([...CATEGORIES, ...custom])
+    })
+  }, [])
 
   const processFile = useCallback(async (file: File) => {
     setError('')
     setResult(null)
     setParsing(true)
     setFilename(file.name)
+    setObservations({})
 
     const content = await file.text()
     let parsed: ParsedTransaction[] = []
@@ -66,6 +77,10 @@ export default function ImportarPage() {
     setPreview(prev => prev.map((t, i) => i === idx ? { ...t, category } : t))
   }
 
+  function updateObservation(idx: number, obs: string) {
+    setObservations(prev => ({ ...prev, [idx]: obs }))
+  }
+
   async function handleImport() {
     if (!preview.length || !fileType) return
     setSaving(true)
@@ -76,8 +91,14 @@ export default function ImportarPage() {
     let imported = 0
     let skipped = 0
 
-    for (const row of preview) {
-      const { error } = await supabase.from('transactions').insert({ ...row, user_id: user.id })
+    for (let i = 0; i < preview.length; i++) {
+      const row = preview[i]
+      const obs = observations[i]
+      const description = (row.category === 'Outros' && obs)
+        ? `${row.description} — ${obs}`
+        : row.description
+
+      const { error } = await supabase.from('transactions').insert({ ...row, description, user_id: user.id })
       if (error) {
         if (error.code === '23505') skipped++
       } else {
@@ -89,6 +110,7 @@ export default function ImportarPage() {
 
     setResult({ imported, skipped })
     setPreview([])
+    setObservations({})
     setSaving(false)
   }
 
@@ -97,7 +119,7 @@ export default function ImportarPage() {
       <h1 className="text-xl font-bold text-white">Importar CSV</h1>
 
       {result && (
-        <Card className="border border-emerald-600/40">
+        <Card>
           <div className="flex items-center gap-2 mb-1" style={{color:'#34d399'}}>
             <CheckCircle size={18} />
             <span className="font-semibold">Importação concluída</span>
@@ -158,8 +180,19 @@ export default function ImportarPage() {
                       </p>
                     </div>
                     <select value={t.category} onChange={e => updateCategory(i, e.target.value)} className="w-full text-xs rounded-lg px-2 py-1.5 mt-2 focus:outline-none" style={{background:'#334155', color:'#e2e8f0', border:'1px solid #475569'}}>
-                      {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
+                    {t.category === 'Outros' && (
+                      <input
+                        type="text"
+                        value={observations[i] || ''}
+                        onChange={e => updateObservation(i, e.target.value)}
+                        placeholder="Observação (opcional)"
+                        maxLength={60}
+                        className="w-full text-xs rounded-lg px-2 py-1.5 mt-1.5 focus:outline-none text-white placeholder-slate-500"
+                        style={{background:'#1e293b', border:'1px solid #475569'}}
+                      />
+                    )}
                   </Card>
                 ))}
               </div>

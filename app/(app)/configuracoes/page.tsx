@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Budget, Settings } from '@/types'
 import { CATEGORIES } from '@/lib/parsers/categorize'
 import { formatBRL } from '@/lib/format'
-import { Save, LogOut } from 'lucide-react'
+import { Save, LogOut, Plus, Trash2 } from 'lucide-react'
 import Card from '@/components/ui/Card'
 import { useRouter } from 'next/navigation'
 
@@ -17,20 +17,26 @@ export default function ConfiguracoesPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [newCatName, setNewCatName] = useState('')
+  const [newCatLimit, setNewCatLimit] = useState('')
+  const [addingCat, setAddingCat] = useState(false)
 
   useEffect(() => {
     async function load() {
       const [sRes, bRes] = await Promise.all([
         supabase.from('settings').select('*').single(),
-        supabase.from('budgets').select('*'),
+        supabase.from('budgets').select('*').order('category'),
       ])
       if (sRes.data) setSettings(sRes.data)
       if (bRes.data) {
-        const withDefaults = CATEGORIES.map(cat => {
-          const found = bRes.data.find((b: Budget) => b.category === cat)
+        // merge: all default categories + any custom ones from DB
+        const fromDB: Budget[] = bRes.data
+        const defaultCats = CATEGORIES.map(cat => {
+          const found = fromDB.find(b => b.category === cat)
           return found || { id: '', user_id: '', category: cat, monthly_limit: 0 }
         })
-        setBudgets(withDefaults)
+        const customCats = fromDB.filter(b => !(CATEGORIES as readonly string[]).includes(b.category))
+        setBudgets([...defaultCats, ...customCats])
       }
       setLoading(false)
     }
@@ -43,6 +49,24 @@ export default function ConfiguracoesPage() {
 
   function updateBudget(category: string, value: string) {
     setBudgets(prev => prev.map(b => b.category === category ? { ...b, monthly_limit: Number(value) || 0 } : b))
+  }
+
+  function addCategory() {
+    const name = newCatName.trim()
+    if (!name) return
+    if (budgets.some(b => b.category.toLowerCase() === name.toLowerCase())) return
+    setBudgets(prev => [...prev, { id: '', user_id: '', category: name, monthly_limit: Number(newCatLimit) || 0 }])
+    setNewCatName('')
+    setNewCatLimit('')
+    setAddingCat(false)
+  }
+
+  async function removeCategory(category: string) {
+    if (!confirm(`Excluir categoria "${category}"? Os lançamentos existentes não serão alterados.`)) return
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase.from('budgets').delete().eq('user_id', user.id).eq('category', category)
+    setBudgets(prev => prev.filter(b => b.category !== category))
   }
 
   async function handleSave() {
@@ -68,6 +92,8 @@ export default function ConfiguracoesPage() {
     await supabase.auth.signOut()
     router.push('/login')
   }
+
+  const isDefault = (cat: string) => (CATEGORIES as readonly string[]).includes(cat)
 
   if (loading) return <div className="text-center py-12" style={{color:'#64748b'}}>Carregando...</div>
 
@@ -96,13 +122,58 @@ export default function ConfiguracoesPage() {
       </Card>
 
       <Card>
-        <h2 className="text-sm font-semibold mb-3" style={{color:'#cbd5e1'}}>Limites por categoria</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold" style={{color:'#cbd5e1'}}>Categorias e limites</h2>
+          <button onClick={() => setAddingCat(true)} className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg text-white" style={{background:'#4f46e5'}}>
+            <Plus size={13} /> Nova
+          </button>
+        </div>
+
+        {addingCat && (
+          <div className="mb-4 p-3 rounded-xl space-y-2" style={{background:'#0f172a'}}>
+            <p className="text-xs font-medium" style={{color:'#94a3b8'}}>Nova categoria</p>
+            <input
+              type="text"
+              value={newCatName}
+              onChange={e => setNewCatName(e.target.value)}
+              placeholder="Nome da categoria"
+              maxLength={40}
+              className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none text-white placeholder-slate-500"
+              style={{background:'#334155'}}
+            />
+            <input
+              type="number"
+              value={newCatLimit}
+              onChange={e => setNewCatLimit(e.target.value)}
+              placeholder="Limite mensal (R$)"
+              className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none text-white placeholder-slate-500"
+              style={{background:'#334155'}}
+            />
+            <div className="flex gap-2">
+              <button onClick={addCategory} className="flex-1 py-2 rounded-lg text-sm font-medium text-white" style={{background:'#4f46e5'}}>Adicionar</button>
+              <button onClick={() => { setAddingCat(false); setNewCatName(''); setNewCatLimit('') }} className="flex-1 py-2 rounded-lg text-sm font-medium" style={{background:'#334155', color:'#94a3b8'}}>Cancelar</button>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-3">
           {budgets.map(b => (
             <div key={b.category}>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs" style={{color:'#94a3b8'}}>{b.category}</label>
-                <span className="text-xs" style={{color:'#64748b'}}>Semanal: {formatBRL(Math.round(b.monthly_limit / 4.33))}</span>
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs" style={{color:'#94a3b8'}}>{b.category}</label>
+                  {!isDefault(b.category) && (
+                    <span className="text-xs px-1.5 py-0.5 rounded" style={{background:'#312e81', color:'#a5b4fc'}}>custom</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs" style={{color:'#64748b'}}>Sem.: {formatBRL(Math.round(b.monthly_limit / 4.33))}</span>
+                  {!isDefault(b.category) && (
+                    <button onClick={() => removeCategory(b.category)} className="p-0.5" style={{color:'#64748b'}}>
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
               </div>
               <input type="number" value={b.monthly_limit} onChange={e => updateBudget(b.category, e.target.value)} className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none text-white" style={{background:'#334155'}} />
             </div>

@@ -17,19 +17,28 @@ export default function LancamentosPage() {
   const [selectedYear] = useState(now.getFullYear())
   const [search, setSearch] = useState('')
   const [filterCat, setFilterCat] = useState('')
+  const [filterSource, setFilterSource] = useState<'' | 'cartao' | 'conta'>('')
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [allCategories, setAllCategories] = useState<string[]>([...CATEGORIES])
   const [loading, setLoading] = useState(true)
   const [editId, setEditId] = useState<string | null>(null)
   const [editData, setEditData] = useState<Partial<Transaction>>({})
   const [showAdd, setShowAdd] = useState(false)
   const [newTx, setNewTx] = useState<{ date: string; description: string; amount: string; category: string; source: 'cartao' | 'conta' }>({ date: '', description: '', amount: '', category: 'Outros', source: 'conta' })
 
+  useEffect(() => {
+    supabase.from('budgets').select('category').then(({ data }) => {
+      if (!data) return
+      const custom = data.map((b: { category: string }) => b.category).filter((c: string) => !(CATEGORIES as readonly string[]).includes(c))
+      if (custom.length > 0) setAllCategories([...CATEGORIES, ...custom])
+    })
+  }, [])
+
   const fetchTx = useCallback(async () => {
     setLoading(true)
     const start = `${selectedYear}-${String(selectedMonth).padStart(2,'0')}-01`
     const lastDay = new Date(selectedYear, selectedMonth, 0).getDate()
     const end = `${selectedYear}-${String(selectedMonth).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`
-
     const { data } = await supabase.from('transactions').select('*').gte('date', start).lte('date', end).order('date', { ascending: false })
     setTransactions(data || [])
     setLoading(false)
@@ -38,10 +47,13 @@ export default function LancamentosPage() {
   useEffect(() => { fetchTx() }, [fetchTx])
 
   const filtered = transactions.filter(t => {
-    const matchSearch = !search || t.description.toLowerCase().includes(search.toLowerCase())
+    const matchSearch = !search || t.description.toLowerCase().includes(search.toLowerCase()) || t.raw_title.toLowerCase().includes(search.toLowerCase())
     const matchCat = !filterCat || t.category === filterCat
-    return matchSearch && matchCat
+    const matchSource = !filterSource || t.source === filterSource
+    return matchSearch && matchCat && matchSource
   })
+
+  const totalFiltered = filtered.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0)
 
   async function handleDelete(id: string) {
     if (!confirm('Excluir lançamento?')) return
@@ -58,21 +70,17 @@ export default function LancamentosPage() {
   async function handleAdd() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user || !newTx.date || !newTx.description || !newTx.amount) return
-
     const amount = parseFloat(newTx.amount.replace(',', '.'))
     if (isNaN(amount)) return
-
     const hashInput = `${newTx.date}|${newTx.description.toLowerCase()}|${amount.toFixed(2)}|${newTx.source}|manual-${Date.now()}`
     const encoder = new TextEncoder()
     const buf = await crypto.subtle.digest('SHA-256', encoder.encode(hashInput))
     const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('')
-
     await supabase.from('transactions').insert({
       user_id: user.id, date: newTx.date, description: newTx.description,
       raw_title: newTx.description, category: newTx.category,
       amount, source: newTx.source, dedup_hash: hash,
     })
-
     setShowAdd(false)
     setNewTx({ date: '', description: '', amount: '', category: 'Outros', source: 'conta' })
     fetchTx()
@@ -87,6 +95,7 @@ export default function LancamentosPage() {
         </button>
       </div>
 
+      {/* Month selector */}
       <div className="flex gap-2 overflow-x-auto pb-1">
         {MONTHS.map((m, i) => (
           <button key={i} onClick={() => setSelectedMonth(i+1)} className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition" style={{background: selectedMonth === i+1 ? '#4f46e5' : '#1e293b', color: selectedMonth === i+1 ? 'white' : '#94a3b8'}}>
@@ -95,17 +104,26 @@ export default function LancamentosPage() {
         ))}
       </div>
 
+      {/* Search + filters */}
       <div className="flex gap-2">
         <div className="flex-1 flex items-center gap-2 rounded-xl px-3" style={{background:'#1e293b'}}>
           <Search size={16} style={{color:'#64748b'}} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..." className="flex-1 bg-transparent text-sm text-slate-200 py-2.5 focus:outline-none placeholder-slate-500" />
         </div>
-        <select value={filterCat} onChange={e => setFilterCat(e.target.value)} className="rounded-xl px-2 text-xs focus:outline-none" style={{background:'#1e293b', color:'#94a3b8', border:'none'}}>
-          <option value="">Todas</option>
-          {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+      </div>
+      <div className="flex gap-2">
+        <select value={filterSource} onChange={e => setFilterSource(e.target.value as '' | 'cartao' | 'conta')} className="flex-1 rounded-xl px-3 py-2 text-xs focus:outline-none text-white" style={{background:'#1e293b', border:'none'}}>
+          <option value="">Todas as origens</option>
+          <option value="cartao">Cartão de crédito</option>
+          <option value="conta">Conta / débito</option>
+        </select>
+        <select value={filterCat} onChange={e => setFilterCat(e.target.value)} className="flex-1 rounded-xl px-3 py-2 text-xs focus:outline-none text-white" style={{background:'#1e293b', border:'none'}}>
+          <option value="">Todas as categorias</option>
+          {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
 
+      {/* Add form */}
       {showAdd && (
         <Card className="space-y-2">
           <p className="text-sm font-semibold text-white">Novo lançamento</p>
@@ -113,7 +131,7 @@ export default function LancamentosPage() {
           <input type="text" value={newTx.description} onChange={e => setNewTx(p => ({...p, description: e.target.value}))} placeholder="Descrição" className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none text-white placeholder-slate-500" style={{background:'#334155'}} />
           <input type="text" inputMode="decimal" value={newTx.amount} onChange={e => setNewTx(p => ({...p, amount: e.target.value}))} placeholder="Valor (ex: 25,90)" className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none text-white placeholder-slate-500" style={{background:'#334155'}} />
           <select value={newTx.category} onChange={e => setNewTx(p => ({...p, category: e.target.value}))} className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none text-white" style={{background:'#334155'}}>
-            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
           <select value={newTx.source} onChange={e => setNewTx(p => ({...p, source: e.target.value as 'cartao'|'conta'}))} className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none text-white" style={{background:'#334155'}}>
             <option value="conta">Conta / Débito / Dinheiro</option>
@@ -129,39 +147,51 @@ export default function LancamentosPage() {
       {loading ? (
         <p className="text-center py-8" style={{color:'#64748b'}}>Carregando...</p>
       ) : (
-        <div className="space-y-2">
-          {filtered.length === 0 && <p className="text-center py-8" style={{color:'#64748b'}}>Nenhum lançamento encontrado</p>}
-          {filtered.map(t => (
-            <Card key={t.id} className="!p-3">
-              {editId === t.id ? (
-                <div className="space-y-2">
-                  <input type="text" value={editData.description || ''} onChange={e => setEditData(p => ({...p, description: e.target.value}))} className="w-full rounded-lg px-2 py-1.5 text-sm focus:outline-none text-white" style={{background:'#334155'}} />
-                  <div className="flex gap-2">
-                    <select value={editData.category || ''} onChange={e => setEditData(p => ({...p, category: e.target.value}))} className="flex-1 rounded-lg px-2 py-1.5 text-xs focus:outline-none text-white" style={{background:'#334155'}}>
-                      {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <button onClick={() => handleSaveEdit(t.id)} className="p-1.5" style={{color:'#34d399'}}><Check size={18} /></button>
-                    <button onClick={() => setEditId(null)} className="p-1.5" style={{color:'#94a3b8'}}><X size={18} /></button>
+        <>
+          {filtered.length > 0 && (
+            <p className="text-xs text-right" style={{color:'#64748b'}}>
+              {filtered.length} lançamento{filtered.length !== 1 ? 's' : ''} · total: {formatBRL(totalFiltered)}
+            </p>
+          )}
+          <div className="space-y-2">
+            {filtered.length === 0 && <p className="text-center py-8" style={{color:'#64748b'}}>Nenhum lançamento encontrado</p>}
+            {filtered.map(t => (
+              <Card key={t.id} className="!p-3">
+                {editId === t.id ? (
+                  <div className="space-y-2">
+                    <input type="text" value={editData.description || ''} onChange={e => setEditData(p => ({...p, description: e.target.value}))} className="w-full rounded-lg px-2 py-1.5 text-sm focus:outline-none text-white" style={{background:'#334155'}} />
+                    <div className="flex gap-2">
+                      <select value={editData.category || ''} onChange={e => setEditData(p => ({...p, category: e.target.value}))} className="flex-1 rounded-lg px-2 py-1.5 text-xs focus:outline-none text-white" style={{background:'#334155'}}>
+                        {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                      <button onClick={() => handleSaveEdit(t.id)} className="p-1.5" style={{color:'#34d399'}}><Check size={18} /></button>
+                      <button onClick={() => setEditId(null)} className="p-1.5" style={{color:'#94a3b8'}}><X size={18} /></button>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="flex items-start gap-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate text-white">{t.description}</p>
-                    <p className="text-xs" style={{color:'#64748b'}}>{formatDate(t.date)} · {t.category} · {t.source === 'cartao' ? 'Cartão' : 'Conta'}</p>
+                ) : (
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm truncate text-white">{t.description}</p>
+                      <p className="text-xs" style={{color:'#64748b'}}>
+                        {formatDate(t.date)} · {t.category} ·{' '}
+                        <span style={{color: t.source === 'cartao' ? '#a5b4fc' : '#6ee7b7'}}>
+                          {t.source === 'cartao' ? 'Cartão' : 'Conta'}
+                        </span>
+                      </p>
+                    </div>
+                    <p className="text-sm font-medium shrink-0" style={{color: t.amount < 0 ? '#34d399' : 'white'}}>
+                      {t.amount < 0 ? '-' : ''}{formatBRL(Math.abs(t.amount))}
+                    </p>
+                    <div className="flex gap-1 shrink-0">
+                      <button onClick={() => { setEditId(t.id); setEditData({ description: t.description, category: t.category }) }} className="p-1" style={{color:'#64748b'}}><Edit2 size={15} /></button>
+                      <button onClick={() => handleDelete(t.id)} className="p-1" style={{color:'#64748b'}}><Trash2 size={15} /></button>
+                    </div>
                   </div>
-                  <p className="text-sm font-medium shrink-0" style={{color: t.amount < 0 ? '#34d399' : 'white'}}>
-                    {t.amount < 0 ? '-' : ''}{formatBRL(Math.abs(t.amount))}
-                  </p>
-                  <div className="flex gap-1 shrink-0">
-                    <button onClick={() => { setEditId(t.id); setEditData({ description: t.description, category: t.category }) }} className="p-1" style={{color:'#64748b'}}><Edit2 size={15} /></button>
-                    <button onClick={() => handleDelete(t.id)} className="p-1" style={{color:'#64748b'}}><Trash2 size={15} /></button>
-                  </div>
-                </div>
-              )}
-            </Card>
-          ))}
-        </div>
+                )}
+              </Card>
+            ))}
+          </div>
+        </>
       )}
     </div>
   )
