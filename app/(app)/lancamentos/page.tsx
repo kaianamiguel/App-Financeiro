@@ -18,6 +18,8 @@ export default function LancamentosPage() {
   const [search, setSearch] = useState('')
   const [filterCat, setFilterCat] = useState('')
   const [filterSource, setFilterSource] = useState<'' | 'cartao' | 'conta'>('')
+  const [filterAccount, setFilterAccount] = useState('')
+  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [allCategories, setAllCategories] = useState<string[]>([...CATEGORIES])
   const [loading, setLoading] = useState(true)
@@ -32,6 +34,9 @@ export default function LancamentosPage() {
       if (!data) return
       const custom = data.map((b: { category: string }) => b.category).filter((c: string) => !(CATEGORIES as readonly string[]).includes(c))
       if (custom.length > 0) setAllCategories([...CATEGORIES, ...custom])
+    })
+    supabase.from('accounts').select('id,name').order('name').then(({ data }) => {
+      if (data) setAccounts(data)
     })
   }, [])
 
@@ -51,7 +56,8 @@ export default function LancamentosPage() {
     const matchSearch = !search || t.description.toLowerCase().includes(search.toLowerCase()) || t.raw_title.toLowerCase().includes(search.toLowerCase())
     const matchCat = !filterCat || t.category === filterCat
     const matchSource = !filterSource || t.source === filterSource
-    return matchSearch && matchCat && matchSource
+    const matchAccount = !filterAccount || t.account_name === filterAccount
+    return matchSearch && matchCat && matchSource && matchAccount
   })
 
   const totalFiltered = filtered.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0)
@@ -127,6 +133,14 @@ export default function LancamentosPage() {
           {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
+      {accounts.length > 0 && (
+        <div className="flex gap-2">
+          <select value={filterAccount} onChange={e => setFilterAccount(e.target.value)} className="flex-1 rounded-xl px-3 py-2 text-xs focus:outline-none text-white" style={{background:'#1e293b', border:'none'}}>
+            <option value="">Todas as origens</option>
+            {accounts.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+          </select>
+        </div>
+      )}
 
       {/* Add form */}
       {showAdd && (

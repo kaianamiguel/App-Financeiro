@@ -2,12 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { BarChart3, Upload, List, Settings } from 'lucide-react'
+import { BarChart3, Upload, List, Settings, Landmark } from 'lucide-react'
 
 const links = [
   { href: '/', icon: BarChart3, label: 'Dashboard' },
   { href: '/importar', icon: Upload, label: 'Importar' },
   { href: '/lancamentos', icon: List, label: 'Lançamentos' },
+  { href: '/patrimonio', icon: Landmark, label: 'Patrimônio' },
   { href: '/configuracoes', icon: Settings, label: 'Config.' },
 ]
 
@@ -26,7 +27,7 @@ export default function BottomNav() {
               className="flex-1 flex flex-col items-center gap-1 py-3 transition"
               style={{color: active ? '#818cf8' : '#64748b'}}
             >
-              <Icon size={22} />
+              <Icon size={20} />
               <span className="text-xs">{label}</span>
             </Link>
           )

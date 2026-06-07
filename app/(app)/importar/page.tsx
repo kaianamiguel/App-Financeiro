@@ -7,7 +7,7 @@ import { isCartaoCSV, parseCartaoCSV } from '@/lib/parsers/cartao'
 import { ParsedTransaction } from '@/types'
 import { CATEGORIES } from '@/lib/parsers/categorize'
 import { formatBRL, formatDate } from '@/lib/format'
-import { Upload, CheckCircle, AlertCircle } from 'lucide-react'
+import { Upload, CheckCircle, AlertCircle, Plus } from 'lucide-react'
 import Card from '@/components/ui/Card'
 
 type ImportResult = { imported: number; skipped: number }
@@ -24,12 +24,19 @@ export default function ImportarPage() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [allCategories, setAllCategories] = useState<string[]>([...CATEGORIES])
+  const [accounts, setAccounts] = useState<{ id: string; name: string; type: string }[]>([])
+  const [selectedAccount, setSelectedAccount] = useState('')
+  const [newAccountName, setNewAccountName] = useState('')
+  const [showNewAccount, setShowNewAccount] = useState(false)
 
   useEffect(() => {
     supabase.from('budgets').select('category').then(({ data }) => {
       if (!data) return
       const custom = data.map(b => b.category).filter(c => !(CATEGORIES as readonly string[]).includes(c))
       if (custom.length > 0) setAllCategories([...CATEGORIES, ...custom])
+    })
+    supabase.from('accounts').select('*').order('name').then(({ data }) => {
+      if (data) setAccounts(data)
     })
   }, [])
 
@@ -81,12 +88,37 @@ export default function ImportarPage() {
     setObservations(prev => ({ ...prev, [idx]: obs }))
   }
 
+  async function handleCreateAccount() {
+    const name = newAccountName.trim()
+    if (!name || !fileType) return
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase.from('accounts').upsert(
+      { user_id: user.id, name, type: fileType },
+      { onConflict: 'user_id,name' }
+    ).select().single()
+    if (data) {
+      setAccounts(prev => [...prev.filter(a => a.name !== data.name), data])
+      setSelectedAccount(data.name)
+    }
+    setNewAccountName('')
+    setShowNewAccount(false)
+  }
+
   async function handleImport() {
     if (!preview.length || !fileType) return
     setSaving(true)
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
+
+    // Ensure account exists if specified
+    if (selectedAccount) {
+      await supabase.from('accounts').upsert(
+        { user_id: user.id, name: selectedAccount, type: fileType },
+        { onConflict: 'user_id,name' }
+      )
+    }
 
     let imported = 0
     let skipped = 0
@@ -98,7 +130,13 @@ export default function ImportarPage() {
         ? `${row.description} — ${obs}`
         : row.description
 
-      const { error } = await supabase.from('transactions').insert({ ...row, description, user_id: user.id })
+      const { error } = await supabase.from('transactions').insert({
+        ...row,
+        description,
+        user_id: user.id,
+        account_name: selectedAccount || null,
+        isFutureInstallment: undefined,
+      })
       if (error) {
         if (error.code === '23505') skipped++
       } else {
@@ -113,6 +151,8 @@ export default function ImportarPage() {
     setObservations({})
     setSaving(false)
   }
+
+  const filteredAccounts = accounts.filter(a => !fileType || a.type === fileType)
 
   return (
     <div className="px-4 pt-6 space-y-4">
@@ -167,13 +207,50 @@ export default function ImportarPage() {
                 </button>
               </div>
 
+              {/* Account selector */}
+              <Card className="space-y-2">
+                <p className="text-xs font-medium" style={{color:'#94a3b8'}}>Origem / conta</p>
+                <div className="flex gap-2">
+                  <select
+                    value={selectedAccount}
+                    onChange={e => setSelectedAccount(e.target.value)}
+                    className="flex-1 rounded-lg px-3 py-2 text-sm focus:outline-none text-white"
+                    style={{background:'#334155'}}
+                  >
+                    <option value="">Sem origem específica</option>
+                    {filteredAccounts.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+                  </select>
+                  <button onClick={() => setShowNewAccount(v => !v)} className="p-2 rounded-lg" style={{background:'#334155', color:'#818cf8'}}>
+                    <Plus size={16} />
+                  </button>
+                </div>
+                {showNewAccount && (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newAccountName}
+                      onChange={e => setNewAccountName(e.target.value)}
+                      placeholder={fileType === 'cartao' ? 'Ex: Nubank, Itaú Visa' : 'Ex: Itaú Conta, C6'}
+                      className="flex-1 rounded-lg px-3 py-2 text-sm focus:outline-none text-white placeholder-slate-500"
+                      style={{background:'#334155'}}
+                    />
+                    <button onClick={handleCreateAccount} className="px-3 py-2 rounded-lg text-sm text-white" style={{background:'#4f46e5'}}>Criar</button>
+                  </div>
+                )}
+              </Card>
+
               <div className="space-y-2 max-h-[60vh] overflow-y-auto">
                 {preview.map((t, i) => (
-                  <Card key={i} className="!p-3">
+                  <Card key={i} className={`!p-3${t.isFutureInstallment ? ' ring-1 ring-indigo-500' : ''}`}>
+                    {t.isFutureInstallment && (
+                      <p className="text-xs mb-1.5 px-1.5 py-0.5 rounded w-fit" style={{background:'rgba(79,70,229,0.2)', color:'#a5b4fc'}}>
+                        Parcela futura · {formatDate(t.date)}
+                      </p>
+                    )}
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm truncate text-white">{t.description}</p>
-                        <p className="text-xs" style={{color:'#64748b'}}>{formatDate(t.date)} · {t.source === 'cartao' ? 'Cartão' : 'Conta'}</p>
+                        <p className="text-xs" style={{color:'#64748b'}}>{!t.isFutureInstallment && `${formatDate(t.date)} · `}{t.source === 'cartao' ? 'Cartão' : 'Conta'}</p>
                       </div>
                       <p className="text-sm font-medium shrink-0" style={{color: t.amount < 0 ? '#34d399' : 'white'}}>
                         {t.amount < 0 ? '-' : ''}{formatBRL(Math.abs(t.amount))}

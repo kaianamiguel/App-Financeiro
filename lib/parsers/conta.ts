@@ -10,6 +10,23 @@ interface ContaRow {
   'Descrição': string
 }
 
+function detectInstallment(title: string): { current: number; total: number; base: string } | null {
+  const match = title.match(/^(.*?)\s+(\d+)\/(\d+)\s*$/i)
+  if (!match) return null
+  const current = parseInt(match[2], 10)
+  const total = parseInt(match[3], 10)
+  if (current < 1 || total < 2 || current > total) return null
+  return { current, total, base: match[1].trim() }
+}
+
+function addMonths(dateStr: string, months: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const date = new Date(y, m - 1 + months, 1)
+  const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+  const day = Math.min(d, lastDay)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
 export async function parseContaCSV(content: string): Promise<ParsedTransaction[]> {
   const result = Papa.parse<ContaRow>(content, {
     header: true,
@@ -32,13 +49,42 @@ export async function parseContaCSV(content: string): Promise<ParsedTransaction[
     const date = `${year}-${month}-${day}`
 
     const rawTitle = desc
-    const description = cleanDescription(rawTitle, 'conta')
-    const category = categorize(rawTitle)
+    const installment = detectInstallment(rawTitle)
 
-    const hashInput = `${date}|${normalizeForHash(rawTitle)}|${amount.toFixed(2)}|conta`
-    const dedup_hash = await generateHash(hashInput)
+    if (installment) {
+      const { current, total, base } = installment
+      const firstInstallmentDate = addMonths(date, -(current - 1))
+      const firstMonth = firstInstallmentDate.slice(0, 7)
+      const normalizedBase = normalizeForHash(base)
 
-    transactions.push({ date, description, raw_title: rawTitle, category, amount, source: 'conta', dedup_hash })
+      for (let i = 0; i < total; i++) {
+        const installDate = addMonths(date, -(current - 1) + i)
+        const installNum = i + 1
+        const isFuture = i > current - 1
+        const description = `${cleanDescription(base, 'conta')} ${installNum}/${total}`
+        const rawT = `${base} ${installNum}/${total}`
+
+        const hashInput = `installment|${firstMonth}|${normalizedBase}|${installNum}|${total}|${amount.toFixed(2)}|conta`
+        const dedup_hash = await generateHash(hashInput)
+
+        transactions.push({
+          date: installDate,
+          description,
+          raw_title: rawT,
+          category: categorize(base),
+          amount,
+          source: 'conta',
+          dedup_hash,
+          isFutureInstallment: isFuture,
+        })
+      }
+    } else {
+      const description = cleanDescription(rawTitle, 'conta')
+      const category = categorize(rawTitle)
+      const hashInput = `${date}|${normalizeForHash(rawTitle)}|${amount.toFixed(2)}|conta`
+      const dedup_hash = await generateHash(hashInput)
+      transactions.push({ date, description, raw_title: rawTitle, category, amount, source: 'conta', dedup_hash })
+    }
   }
 
   return transactions

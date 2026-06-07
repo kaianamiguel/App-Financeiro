@@ -7,6 +7,7 @@ export interface Transaction {
   category: string
   amount: number
   source: 'cartao' | 'conta'
+  account_name?: string
   dedup_hash: string
   created_at: string
 }
@@ -34,6 +35,22 @@ export interface Upload {
   created_at: string
 }
 
+export interface Account {
+  id: string
+  user_id: string
+  name: string
+  type: 'cartao' | 'conta'
+}
+
+export interface Asset {
+  id: string
+  user_id: string
+  name: string
+  type: string
+  value: number
+  updated_at: string
+}
+
 export interface ParsedTransaction {
   date: string
   description: string
@@ -41,7 +58,9 @@ export interface ParsedTransaction {
   category: string
   amount: number
   source: 'cartao' | 'conta'
+  account_name?: string
   dedup_hash: string
+  isFutureInstallment?: boolean
 }
 
 export type CategoryName =

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { getMonthLabel, toISODate } from '@/lib/format'
+import { getMonthLabel, toISODate, formatBRL } from '@/lib/format'
 import { Transaction, Budget, Settings } from '@/types'
 import SavingsCard from '@/components/dashboard/SavingsCard'
 import SpendingCard from '@/components/dashboard/SpendingCard'
@@ -102,6 +102,13 @@ export default function DashboardPage() {
   const weeklySavingsGoal = Math.round(settings.savings_goal / 4.33)
   const weeklyTotalLimit = Math.round(totalLimit / 4.33)
 
+  const today = new Date()
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()
+  const daysRemaining = daysInMonth - today.getDate() + 1
+  const dailyBudget = !weeklyMode && totalLimit > 0
+    ? Math.max(0, (totalLimit - totalSpent) / daysRemaining)
+    : null
+
   const categoryData = budgets.map(b => ({
     category: b.category,
     spent: categorySpending[b.category] || 0,
@@ -141,6 +148,20 @@ export default function DashboardPage() {
         <div className="text-center py-12" style={{color:'#64748b'}}>Carregando...</div>
       ) : (
         <>
+          {dailyBudget !== null && (
+            <Card>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs mb-0.5" style={{color:'#94a3b8'}}>Posso gastar hoje</p>
+                  <p className="text-2xl font-bold" style={{color: dailyBudget > 0 ? '#34d399' : '#f87171'}}>{formatBRL(dailyBudget)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs" style={{color:'#64748b'}}>{daysRemaining} dia{daysRemaining !== 1 ? 's' : ''} restante{daysRemaining !== 1 ? 's' : ''}</p>
+                  <p className="text-xs mt-0.5" style={{color:'#475569'}}>saldo: {formatBRL(Math.max(0, totalLimit - totalSpent))}</p>
+                </div>
+              </div>
+            </Card>
+          )}
           <SavingsCard
             totalSpent={totalSpent}
             monthlyIncome={weeklyMode ? weeklyIncome : settings.monthly_income}
