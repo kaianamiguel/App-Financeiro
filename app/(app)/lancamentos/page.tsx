@@ -25,6 +25,7 @@ export default function LancamentosPage() {
   const [editData, setEditData] = useState<Partial<Transaction>>({})
   const [showAdd, setShowAdd] = useState(false)
   const [newTx, setNewTx] = useState<{ date: string; description: string; amount: string; category: string; source: 'cartao' | 'conta' }>({ date: '', description: '', amount: '', category: 'Outros', source: 'conta' })
+  const [newObs, setNewObs] = useState('')
 
   useEffect(() => {
     supabase.from('budgets').select('category').then(({ data }) => {
@@ -72,17 +73,21 @@ export default function LancamentosPage() {
     if (!user || !newTx.date || !newTx.description || !newTx.amount) return
     const amount = parseFloat(newTx.amount.replace(',', '.'))
     if (isNaN(amount)) return
-    const hashInput = `${newTx.date}|${newTx.description.toLowerCase()}|${amount.toFixed(2)}|${newTx.source}|manual-${Date.now()}`
+    const description = (newTx.category === 'Outros' && newObs.trim())
+      ? `${newTx.description} — ${newObs.trim()}`
+      : newTx.description
+    const hashInput = `${newTx.date}|${description.toLowerCase()}|${amount.toFixed(2)}|${newTx.source}|manual-${Date.now()}`
     const encoder = new TextEncoder()
     const buf = await crypto.subtle.digest('SHA-256', encoder.encode(hashInput))
     const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('')
     await supabase.from('transactions').insert({
-      user_id: user.id, date: newTx.date, description: newTx.description,
+      user_id: user.id, date: newTx.date, description,
       raw_title: newTx.description, category: newTx.category,
       amount, source: newTx.source, dedup_hash: hash,
     })
     setShowAdd(false)
     setNewTx({ date: '', description: '', amount: '', category: 'Outros', source: 'conta' })
+    setNewObs('')
     fetchTx()
   }
 
@@ -137,6 +142,17 @@ export default function LancamentosPage() {
             <option value="conta">Conta / Débito / Dinheiro</option>
             <option value="cartao">Cartão de Crédito</option>
           </select>
+          {newTx.category === 'Outros' && (
+            <input
+              type="text"
+              value={newObs}
+              onChange={e => setNewObs(e.target.value)}
+              placeholder="Observação (opcional)"
+              maxLength={60}
+              className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none text-white placeholder-slate-500"
+              style={{background:'#334155'}}
+            />
+          )}
           <div className="flex gap-2">
             <button onClick={handleAdd} className="flex-1 py-2 rounded-lg text-sm font-medium text-white" style={{background:'#4f46e5'}}>Salvar</button>
             <button onClick={() => setShowAdd(false)} className="flex-1 py-2 rounded-lg text-sm font-medium" style={{background:'#334155', color:'#94a3b8'}}>Cancelar</button>

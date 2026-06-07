@@ -168,11 +168,9 @@ export default function ConfiguracoesPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs" style={{color:'#64748b'}}>Sem.: {formatBRL(Math.round(b.monthly_limit / 4.33))}</span>
-                  {!isDefault(b.category) && (
-                    <button onClick={() => removeCategory(b.category)} className="p-0.5" style={{color:'#64748b'}}>
-                      <Trash2 size={13} />
-                    </button>
-                  )}
+                  <button onClick={() => removeCategory(b.category)} className="p-0.5" style={{color:'#64748b'}}>
+                    <Trash2 size={13} />
+                  </button>
                 </div>
               </div>
               <input type="number" value={b.monthly_limit} onChange={e => updateBudget(b.category, e.target.value)} className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none text-white" style={{background:'#334155'}} />
