@@ -22,7 +22,7 @@ export default function LancamentosPage() {
   const [editId, setEditId] = useState<string | null>(null)
   const [editData, setEditData] = useState<Partial<Transaction>>({})
   const [showAdd, setShowAdd] = useState(false)
-  const [newTx, setNewTx] = useState({ date: '', description: '', amount: '', category: 'Outros', source: 'conta' as const })
+  const [newTx, setNewTx] = useState<{ date: string; description: string; amount: string; category: string; source: 'cartao' | 'conta' }>({ date: '', description: '', amount: '', category: 'Outros', source: 'conta' })
 
   const fetchTx = useCallback(async () => {
     setLoading(true)

@@ -14,7 +14,7 @@ export default function HistoryChart({ data }: HistoryChartProps) {
         <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
         <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 11 }} />
         <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={55} tickFormatter={v => `R$${(v/1000).toFixed(1)}k`} />
-        <Tooltip formatter={(v: number) => formatBRL(v)} contentStyle={{background:'#1e293b', border:'1px solid #334155', borderRadius:8}} labelStyle={{color:'#cbd5e1'}} />
+        <Tooltip formatter={(v) => formatBRL(Number(v))} contentStyle={{background:'#1e293b', border:'1px solid #334155', borderRadius:8}} labelStyle={{color:'#cbd5e1'}} />
         <Bar dataKey="total" fill="#6366f1" radius={[4, 4, 0, 0]} name="Total gasto" />
       </BarChart>
     </ResponsiveContainer>
