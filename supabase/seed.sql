@@ -1,7 +1,6 @@
--- Run this after creating your user account via Supabase Auth
--- Replace 'YOUR_USER_UUID' with your actual user ID from auth.users
+-- Execute after creating your user in Supabase Auth.
+-- Replace YOUR_USER_UUID with your actual user ID from auth.users table.
 
--- Default budgets
 insert into budgets (user_id, category, monthly_limit) values
   ('YOUR_USER_UUID', 'Mercado', 450),
   ('YOUR_USER_UUID', 'Saúde/Bem-estar', 430),
@@ -18,7 +17,6 @@ insert into budgets (user_id, category, monthly_limit) values
   ('YOUR_USER_UUID', 'Outros', 75)
 on conflict (user_id, category) do nothing;
 
--- Default settings
 insert into settings (user_id, monthly_income, savings_goal)
 values ('YOUR_USER_UUID', 7000, 4500)
 on conflict (user_id) do nothing;

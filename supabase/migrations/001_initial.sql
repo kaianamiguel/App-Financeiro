@@ -20,21 +20,10 @@ create index if not exists transactions_date_idx on transactions(user_id, date);
 
 alter table transactions enable row level security;
 
-create policy "Users can view own transactions"
-  on transactions for select
-  using (auth.uid() = user_id);
-
-create policy "Users can insert own transactions"
-  on transactions for insert
-  with check (auth.uid() = user_id);
-
-create policy "Users can update own transactions"
-  on transactions for update
-  using (auth.uid() = user_id);
-
-create policy "Users can delete own transactions"
-  on transactions for delete
-  using (auth.uid() = user_id);
+create policy "Users can view own transactions" on transactions for select using (auth.uid() = user_id);
+create policy "Users can insert own transactions" on transactions for insert with check (auth.uid() = user_id);
+create policy "Users can update own transactions" on transactions for update using (auth.uid() = user_id);
+create policy "Users can delete own transactions" on transactions for delete using (auth.uid() = user_id);
 
 -- budgets table
 create table if not exists budgets (
@@ -47,21 +36,10 @@ create table if not exists budgets (
 
 alter table budgets enable row level security;
 
-create policy "Users can view own budgets"
-  on budgets for select
-  using (auth.uid() = user_id);
-
-create policy "Users can insert own budgets"
-  on budgets for insert
-  with check (auth.uid() = user_id);
-
-create policy "Users can update own budgets"
-  on budgets for update
-  using (auth.uid() = user_id);
-
-create policy "Users can delete own budgets"
-  on budgets for delete
-  using (auth.uid() = user_id);
+create policy "Users can view own budgets" on budgets for select using (auth.uid() = user_id);
+create policy "Users can insert own budgets" on budgets for insert with check (auth.uid() = user_id);
+create policy "Users can update own budgets" on budgets for update using (auth.uid() = user_id);
+create policy "Users can delete own budgets" on budgets for delete using (auth.uid() = user_id);
 
 -- settings table
 create table if not exists settings (
@@ -72,17 +50,9 @@ create table if not exists settings (
 
 alter table settings enable row level security;
 
-create policy "Users can view own settings"
-  on settings for select
-  using (auth.uid() = user_id);
-
-create policy "Users can insert own settings"
-  on settings for insert
-  with check (auth.uid() = user_id);
-
-create policy "Users can update own settings"
-  on settings for update
-  using (auth.uid() = user_id);
+create policy "Users can view own settings" on settings for select using (auth.uid() = user_id);
+create policy "Users can insert own settings" on settings for insert with check (auth.uid() = user_id);
+create policy "Users can update own settings" on settings for update using (auth.uid() = user_id);
 
 -- uploads table
 create table if not exists uploads (
@@ -97,10 +67,5 @@ create table if not exists uploads (
 
 alter table uploads enable row level security;
 
-create policy "Users can view own uploads"
-  on uploads for select
-  using (auth.uid() = user_id);
-
-create policy "Users can insert own uploads"
-  on uploads for insert
-  with check (auth.uid() = user_id);
+create policy "Users can view own uploads" on uploads for select using (auth.uid() = user_id);
+create policy "Users can insert own uploads" on uploads for insert with check (auth.uid() = user_id);
