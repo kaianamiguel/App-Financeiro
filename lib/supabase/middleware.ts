@@ -27,23 +27,22 @@ export async function updateSession(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  const url = request.nextUrl.clone()
-  const isAuthRoute = url.pathname.startsWith('/login')
-  const isPublicAsset = url.pathname.startsWith('/_next') ||
-    url.pathname.startsWith('/icons') ||
-    url.pathname === '/manifest.webmanifest' ||
-    url.pathname === '/sw.js' ||
-    url.pathname === '/favicon.ico'
+  const { pathname } = request.nextUrl
 
-  if (isPublicAsset) return supabaseResponse
+  const isPublicPath =
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/icons') ||
+    pathname === '/manifest.webmanifest' ||
+    pathname === '/sw.js' ||
+    pathname === '/favicon.ico'
 
-  if (!user && !isAuthRoute) {
+  // Only redirect to login for protected routes when there is no session.
+  // Never redirect away from /login here — the login page handles that itself
+  // to avoid redirect loops when cookies are stale or missing.
+  if (!user && !isPublicPath) {
+    const url = request.nextUrl.clone()
     url.pathname = '/login'
-    return NextResponse.redirect(url)
-  }
-
-  if (user && isAuthRoute) {
-    url.pathname = '/'
     return NextResponse.redirect(url)
   }
 
