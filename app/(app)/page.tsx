@@ -148,20 +148,6 @@ export default function DashboardPage() {
         <div className="text-center py-12" style={{color:'#64748b'}}>Carregando...</div>
       ) : (
         <>
-          {dailyBudget !== null && (
-            <Card>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs mb-0.5" style={{color:'#94a3b8'}}>Posso gastar hoje</p>
-                  <p className="text-2xl font-bold" style={{color: dailyBudget > 0 ? '#34d399' : '#f87171'}}>{formatBRL(dailyBudget)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs" style={{color:'#64748b'}}>{daysRemaining} dia{daysRemaining !== 1 ? 's' : ''} restante{daysRemaining !== 1 ? 's' : ''}</p>
-                  <p className="text-xs mt-0.5" style={{color:'#475569'}}>saldo: {formatBRL(Math.max(0, totalLimit - totalSpent))}</p>
-                </div>
-              </div>
-            </Card>
-          )}
           <SavingsCard
             totalSpent={totalSpent}
             monthlyIncome={weeklyMode ? weeklyIncome : settings.monthly_income}
@@ -170,6 +156,8 @@ export default function DashboardPage() {
           <SpendingCard
             totalSpent={totalSpent}
             monthlyLimit={weeklyMode ? weeklyTotalLimit : totalLimit}
+            dailyBudget={dailyBudget}
+            daysRemaining={daysRemaining}
           />
 
           <Card>
