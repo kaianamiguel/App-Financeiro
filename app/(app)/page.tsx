@@ -98,21 +98,20 @@ export default function DashboardPage() {
   const totalSpent = Object.values(categorySpending).reduce((a, b) => a + b, 0)
   const totalLimit = budgets.reduce((a, b) => a + b.monthly_limit, 0)
 
+  // Monthly total spent (always full month, used for daily budget regardless of view mode)
+  const monthlyTotalSpent = transactions.reduce((sum, t) => sum + t.amount, 0)
+
   const weeklyIncome = Math.round(settings.monthly_income / 4.33)
   const weeklySavingsGoal = Math.round(settings.savings_goal / 4.33)
   const weeklyTotalLimit = Math.round(totalLimit / 4.33)
 
   const today = new Date()
   const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()
-  const daysRemainingMonth = daysInMonth - today.getDate() + 1
+  const daysRemaining = daysInMonth - today.getDate() + 1
 
-  // Weekly: days remaining in current week (Sun=0..Sat=6), today included
-  const daysRemainingWeek = 7 - today.getDay()
-
-  const dailyBudget = weeklyMode
-    ? (weeklyTotalLimit > 0 ? Math.max(0, (weeklyTotalLimit - totalSpent) / daysRemainingWeek) : null)
-    : (totalLimit > 0 ? Math.max(0, (totalLimit - totalSpent) / daysRemainingMonth) : null)
-  const daysRemaining = weeklyMode ? daysRemainingWeek : daysRemainingMonth
+  const dailyBudget = totalLimit > 0
+    ? Math.max(0, (totalLimit - monthlyTotalSpent) / daysRemaining)
+    : null
 
   const categoryData = budgets.map(b => ({
     category: b.category,
