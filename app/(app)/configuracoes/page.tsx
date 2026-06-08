@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Budget, Settings } from '@/types'
+import { Budget, Settings, Account } from '@/types'
 import { CATEGORIES } from '@/lib/parsers/categorize'
 import { formatBRL } from '@/lib/format'
-import { Save, LogOut, Plus, Trash2 } from 'lucide-react'
+import { Save, LogOut, Plus, Trash2, Edit2, Check, X } from 'lucide-react'
 import Card from '@/components/ui/Card'
 import { useRouter } from 'next/navigation'
 
@@ -20,6 +20,12 @@ export default function ConfiguracoesPage() {
   const [newCatName, setNewCatName] = useState('')
   const [newCatLimit, setNewCatLimit] = useState('')
   const [addingCat, setAddingCat] = useState(false)
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [addingAccount, setAddingAccount] = useState(false)
+  const [newAccName, setNewAccName] = useState('')
+  const [newAccType, setNewAccType] = useState<'cartao' | 'conta'>('conta')
+  const [editAccId, setEditAccId] = useState<string | null>(null)
+  const [editAccName, setEditAccName] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -27,6 +33,8 @@ export default function ConfiguracoesPage() {
         supabase.from('settings').select('*').single(),
         supabase.from('budgets').select('*').order('category'),
       ])
+      const accRes = await supabase.from('accounts').select('*').order('name')
+      if (accRes.data) setAccounts(accRes.data)
       if (sRes.data) setSettings(sRes.data)
       if (bRes.data) {
         // merge: all default categories + any custom ones from DB
@@ -67,6 +75,33 @@ export default function ConfiguracoesPage() {
     if (!user) return
     await supabase.from('budgets').delete().eq('user_id', user.id).eq('category', category)
     setBudgets(prev => prev.filter(b => b.category !== category))
+  }
+
+  async function handleAddAccount() {
+    const name = newAccName.trim()
+    if (!name) return
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase.from('accounts')
+      .upsert({ user_id: user.id, name, type: newAccType }, { onConflict: 'user_id,name' })
+      .select().single()
+    if (data) setAccounts(prev => [...prev.filter(a => a.name !== data.name), data].sort((a, b) => a.name.localeCompare(b.name)))
+    setNewAccName('')
+    setAddingAccount(false)
+  }
+
+  async function handleSaveAccount(id: string) {
+    const name = editAccName.trim()
+    if (!name) return
+    await supabase.from('accounts').update({ name }).eq('id', id)
+    setAccounts(prev => prev.map(a => a.id === id ? { ...a, name } : a))
+    setEditAccId(null)
+  }
+
+  async function handleDeleteAccount(id: string, name: string) {
+    if (!confirm(`Excluir origem "${name}"?`)) return
+    await supabase.from('accounts').delete().eq('id', id)
+    setAccounts(prev => prev.filter(a => a.id !== id))
   }
 
   async function handleSave() {
@@ -181,6 +216,77 @@ export default function ConfiguracoesPage() {
         <div className="mt-4 p-3 rounded-xl text-sm" style={{background: over ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.15)', color: over ? '#f87171' : '#34d399'}}>
           Total: {formatBRL(totalLimit)} / disponível: {formatBRL(maxLimit)}
           {over && <p className="text-xs mt-1">⚠️ Soma ultrapassa o disponível para gastos!</p>}
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold" style={{color:'#cbd5e1'}}>Origens (contas e cartões)</h2>
+          <button onClick={() => setAddingAccount(true)} className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg text-white" style={{background:'#4f46e5'}}>
+            <Plus size={13} /> Nova
+          </button>
+        </div>
+
+        {addingAccount && (
+          <div className="mb-4 p-3 rounded-xl space-y-2" style={{background:'#0f172a'}}>
+            <p className="text-xs font-medium" style={{color:'#94a3b8'}}>Nova origem</p>
+            <input
+              type="text"
+              value={newAccName}
+              onChange={e => setNewAccName(e.target.value)}
+              placeholder="Ex: Nubank, Itaú Conta, C6"
+              maxLength={40}
+              className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none text-white placeholder-slate-500"
+              style={{background:'#334155'}}
+            />
+            <select
+              value={newAccType}
+              onChange={e => setNewAccType(e.target.value as 'cartao' | 'conta')}
+              className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none text-white"
+              style={{background:'#334155'}}
+            >
+              <option value="conta">Conta / Débito / Dinheiro</option>
+              <option value="cartao">Cartão de Crédito</option>
+            </select>
+            <div className="flex gap-2">
+              <button onClick={handleAddAccount} className="flex-1 py-2 rounded-lg text-sm font-medium text-white" style={{background:'#4f46e5'}}>Adicionar</button>
+              <button onClick={() => { setAddingAccount(false); setNewAccName('') }} className="flex-1 py-2 rounded-lg text-sm font-medium" style={{background:'#334155', color:'#94a3b8'}}>Cancelar</button>
+            </div>
+          </div>
+        )}
+
+        {accounts.length === 0 && !addingAccount && (
+          <p className="text-xs py-2" style={{color:'#475569'}}>Nenhuma origem cadastrada. Crie para organizar seus lançamentos.</p>
+        )}
+
+        <div className="space-y-2">
+          {accounts.map(acc => (
+            <div key={acc.id} className="flex items-center gap-2 p-2 rounded-lg" style={{background:'#0f172a'}}>
+              {editAccId === acc.id ? (
+                <>
+                  <input
+                    type="text"
+                    value={editAccName}
+                    onChange={e => setEditAccName(e.target.value)}
+                    className="flex-1 rounded px-2 py-1 text-sm focus:outline-none text-white"
+                    style={{background:'#334155'}}
+                    autoFocus
+                  />
+                  <button onClick={() => handleSaveAccount(acc.id)} className="p-1" style={{color:'#34d399'}}><Check size={15} /></button>
+                  <button onClick={() => setEditAccId(null)} className="p-1" style={{color:'#94a3b8'}}><X size={15} /></button>
+                </>
+              ) : (
+                <>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white truncate">{acc.name}</p>
+                    <p className="text-xs" style={{color:'#475569'}}>{acc.type === 'cartao' ? 'Cartão de crédito' : 'Conta / débito'}</p>
+                  </div>
+                  <button onClick={() => { setEditAccId(acc.id); setEditAccName(acc.name) }} className="p-1" style={{color:'#64748b'}}><Edit2 size={14} /></button>
+                  <button onClick={() => handleDeleteAccount(acc.id, acc.name)} className="p-1" style={{color:'#64748b'}}><Trash2 size={14} /></button>
+                </>
+              )}
+            </div>
+          ))}
         </div>
       </Card>
 

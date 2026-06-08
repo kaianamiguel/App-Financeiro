@@ -104,10 +104,15 @@ export default function DashboardPage() {
 
   const today = new Date()
   const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()
-  const daysRemaining = daysInMonth - today.getDate() + 1
-  const dailyBudget = !weeklyMode && totalLimit > 0
-    ? Math.max(0, (totalLimit - totalSpent) / daysRemaining)
-    : null
+  const daysRemainingMonth = daysInMonth - today.getDate() + 1
+
+  // Weekly: days remaining in current week (Sun=0..Sat=6), today included
+  const daysRemainingWeek = 7 - today.getDay()
+
+  const dailyBudget = weeklyMode
+    ? (weeklyTotalLimit > 0 ? Math.max(0, (weeklyTotalLimit - totalSpent) / daysRemainingWeek) : null)
+    : (totalLimit > 0 ? Math.max(0, (totalLimit - totalSpent) / daysRemainingMonth) : null)
+  const daysRemaining = weeklyMode ? daysRemainingWeek : daysRemainingMonth
 
   const categoryData = budgets.map(b => ({
     category: b.category,
