@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Transaction } from '@/types'
 import { CATEGORIES } from '@/lib/parsers/categorize'
 import { formatBRL, formatDate } from '@/lib/format'
-import { Plus, Search, Trash2, Edit2, Check, X } from 'lucide-react'
+import { Plus, Search, Trash2, Edit2, Check, X, Calendar, Tag, CreditCard, Banknote } from 'lucide-react'
 import Card from '@/components/ui/Card'
 
 const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
@@ -25,6 +25,7 @@ export default function LancamentosPage() {
   const [editId, setEditId] = useState<string | null>(null)
   const [editData, setEditData] = useState<Partial<Transaction>>({})
   const [showAdd, setShowAdd] = useState(false)
+  const [detailTx, setDetailTx] = useState<Transaction | null>(null)
   const [newTx, setNewTx] = useState<{ date: string; description: string; amount: string; category: string; source: 'cartao' | 'conta' }>({ date: '', description: '', amount: '', category: 'Outros', source: 'conta' })
   const [newObs, setNewObs] = useState('')
 
@@ -97,6 +98,79 @@ export default function LancamentosPage() {
 
   return (
     <div className="px-4 pt-6 space-y-4">
+      {/* Detail modal */}
+      {detailTx && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" style={{background:'rgba(0,0,0,0.6)'}} onClick={() => setDetailTx(null)}>
+          <div className="w-full max-w-lg rounded-t-2xl p-6 space-y-4" style={{background:'#0f172a'}} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-white">Detalhes do lançamento</h2>
+              <button onClick={() => setDetailTx(null)} className="p-1 rounded-full" style={{color:'#94a3b8'}}><X size={20} /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs mb-0.5" style={{color:'#64748b'}}>Descrição</p>
+                <p className="text-sm text-white">{detailTx.description}</p>
+                {detailTx.raw_title && detailTx.raw_title !== detailTx.description && (
+                  <p className="text-xs mt-0.5" style={{color:'#64748b'}}>{detailTx.raw_title}</p>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl p-3" style={{background:'#1e293b'}}>
+                  <div className="flex items-center gap-1.5 mb-1" style={{color:'#64748b'}}>
+                    <Calendar size={13} />
+                    <span className="text-xs">Data</span>
+                  </div>
+                  <p className="text-sm text-white">{formatDate(detailTx.date)}</p>
+                </div>
+                <div className="rounded-xl p-3" style={{background:'#1e293b'}}>
+                  <div className="flex items-center gap-1.5 mb-1" style={{color:'#64748b'}}>
+                    <Tag size={13} />
+                    <span className="text-xs">Categoria</span>
+                  </div>
+                  <p className="text-sm text-white">{detailTx.category}</p>
+                </div>
+                <div className="rounded-xl p-3" style={{background:'#1e293b'}}>
+                  <div className="flex items-center gap-1.5 mb-1" style={{color:'#64748b'}}>
+                    {detailTx.source === 'cartao' ? <CreditCard size={13} /> : <Banknote size={13} />}
+                    <span className="text-xs">Origem</span>
+                  </div>
+                  <p className="text-sm" style={{color: detailTx.source === 'cartao' ? '#a5b4fc' : '#6ee7b7'}}>
+                    {detailTx.source === 'cartao' ? 'Cartão de Crédito' : 'Conta / Débito'}
+                  </p>
+                </div>
+                <div className="rounded-xl p-3" style={{background:'#1e293b'}}>
+                  <p className="text-xs mb-1" style={{color:'#64748b'}}>Valor</p>
+                  <p className="text-sm font-semibold" style={{color: detailTx.amount < 0 ? '#34d399' : 'white'}}>
+                    {detailTx.amount < 0 ? '-' : ''}{formatBRL(Math.abs(detailTx.amount))}
+                  </p>
+                </div>
+              </div>
+              {detailTx.account_name && (
+                <div className="rounded-xl p-3" style={{background:'#1e293b'}}>
+                  <p className="text-xs mb-0.5" style={{color:'#64748b'}}>Conta</p>
+                  <p className="text-sm text-white">{detailTx.account_name}</p>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => { setDetailTx(null); setEditId(detailTx.id); setEditData({ description: detailTx.description, category: detailTx.category }) }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium text-white flex items-center justify-center gap-1.5"
+                style={{background:'#1e293b'}}
+              >
+                <Edit2 size={15} /> Editar
+              </button>
+              <button
+                onClick={() => { setDetailTx(null); handleDelete(detailTx.id) }}
+                className="py-2.5 px-4 rounded-xl text-sm font-medium flex items-center gap-1.5"
+                style={{background:'#1e293b', color:'#f87171'}}
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-white">Lançamentos</h1>
         <button onClick={() => setShowAdd(true)} className="flex items-center gap-1 px-3 py-2 rounded-xl text-sm font-medium text-white" style={{background:'#4f46e5'}}>
@@ -175,7 +249,7 @@ export default function LancamentosPage() {
           <div className="space-y-2">
             {filtered.length === 0 && <p className="text-center py-8" style={{color:'#64748b'}}>Nenhum lançamento encontrado</p>}
             {filtered.map(t => (
-              <Card key={t.id} className="!p-3">
+              <Card key={t.id} className="!p-3" onClick={editId === t.id ? undefined : () => setDetailTx(t)} style={editId !== t.id ? {cursor:'pointer'} : undefined}>
                 {editId === t.id ? (
                   <div className="space-y-2">
                     <input type="text" value={editData.description || ''} onChange={e => setEditData(p => ({...p, description: e.target.value}))} className="w-full rounded-lg px-2 py-1.5 text-sm focus:outline-none text-white" style={{background:'#334155'}} />
@@ -202,8 +276,8 @@ export default function LancamentosPage() {
                       {t.amount < 0 ? '-' : ''}{formatBRL(Math.abs(t.amount))}
                     </p>
                     <div className="flex gap-1 shrink-0">
-                      <button onClick={() => { setEditId(t.id); setEditData({ description: t.description, category: t.category }) }} className="p-1" style={{color:'#64748b'}}><Edit2 size={15} /></button>
-                      <button onClick={() => handleDelete(t.id)} className="p-1" style={{color:'#64748b'}}><Trash2 size={15} /></button>
+                      <button onClick={e => { e.stopPropagation(); setEditId(t.id); setEditData({ description: t.description, category: t.category }) }} className="p-1" style={{color:'#64748b'}}><Edit2 size={15} /></button>
+                      <button onClick={e => { e.stopPropagation(); handleDelete(t.id) }} className="p-1" style={{color:'#64748b'}}><Trash2 size={15} /></button>
                     </div>
                   </div>
                 )}
